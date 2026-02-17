@@ -1,6 +1,6 @@
 # ParlSpeech V2 — Cross-Parliament Comparative Analysis
 
-A Python analysis of the [ParlSpeech V2](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/L4OAKN) dataset, designed to run in [SURF's Blind SANE](https://servicedesk.surf.nl/wiki/spaces/WIKI/pages/96207010/Working+with+Blind+SANE+as+a+researcher) secure analysis environment.
+A demo analysis of the publicly available [ParlSpeech V2](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/L4OAKN) dataset, designed to run in [SURF's Blind SANE](https://servicedesk.surf.nl/wiki/spaces/WIKI/pages/96207010/Working+with+Blind+SANE+as+a+researcher) secure analysis environment.
 
 ParlSpeech V2 contains 6.3 million parliamentary speeches from 9 democracies (Rauh & Schwalbach, 2020).
 
@@ -24,11 +24,16 @@ ParlSpeech V2 contains 6.3 million parliamentary speeches from 9 democracies (Ra
 - **4 bar charts** — total speeches, unique speakers, average speech length, and number of parties per parliament
 - **report.html** — a self-contained HTML report combining the table and charts
 
-## Usage
+## How to use with Blind SANE
 
-```bash
-python3 script.py -i /source/ -o /results/ -t /tmp/
-```
+### Instructions
+
+1. The data provider: Upload the 9 `.rds` corpus files to `/source/` on the Blind SANE VM.
+2. The researcher: When creating the Blind SANE workspace, provide this Git repository as the `blind_python_source`:
+   ```
+   https://github.com/odissei-data/parlspeech-analysis.git
+   ```
+3. The data provider: After the analysis completes, the results can be extracted from `/results/` on the Blind SANE VM for review and release.
 
 ### Blind SANE configuration
 
@@ -37,6 +42,12 @@ python3 script.py -i /source/ -o /results/ -t /tmp/
 | `blind_python_source`  | `https://github.com/odissei-data/parlspeech-analysis.git`   |
 | Recommended VM         | 32 GB RAM, 4 vCPUs                                          |
 | Expected runtime       | ~13 minutes                                                  |
+
+### Running manually
+
+```bash
+python3 script.py -i /source/ -o /results/ -t /tmp/
+```
 
 ### Dependencies
 
