@@ -27,7 +27,7 @@ ParlSpeech V2 contains 6.3 million parliamentary speeches from 9 democracies (Ra
 ## Usage
 
 ```bash
-python3 scripts/script.py -i /source/ -o /results/ -t /tmp/
+python3 script.py -i /source/ -o /results/ -t /tmp/
 ```
 
 ### Blind SANE configuration
@@ -40,7 +40,7 @@ python3 scripts/script.py -i /source/ -o /results/ -t /tmp/
 
 ### Dependencies
 
-Listed in [`scripts/requirements.txt`](scripts/requirements.txt): `rdata`, `pandas`, `matplotlib`, `numpy`.
+Listed in [`requirements.txt`](requirements.txt): `rdata`, `pandas`, `matplotlib`, `numpy`.
 
 ## Data source
 
