@@ -21,8 +21,11 @@ ParlSpeech V2 contains 6.3 million parliamentary speeches from 9 democracies (Ra
 ## What the script produces
 
 - **summary.csv** — one row per parliament with aggregate statistics (total speeches, unique speakers, parties, average speech length, date range)
-- **4 bar charts** — total speeches, unique speakers, average speech length, and number of parties per parliament
-- **report.html** — a self-contained HTML report combining the table and charts
+- **polarisation.csv** — year-by-year lexical polarisation score per parliament
+- **5 charts** — total speeches, unique speakers, average speech length, number of parties per parliament, and lexical polarisation trends over time
+- **report.html** — a self-contained HTML report combining all tables and charts
+
+The polarisation analysis measures how linguistically distinct parties are from each other within each parliament per year, using mean pairwise cosine distance between party word-frequency vectors.
 
 ## How to use with Blind SANE
 
@@ -41,7 +44,7 @@ ParlSpeech V2 contains 6.3 million parliamentary speeches from 9 democracies (Ra
 |------------------------|--------------------------------------------------------------|
 | `blind_python_source`  | `https://github.com/odissei-data/parlspeech-analysis.git`   |
 | Recommended VM         | 32 GB RAM, 4 vCPUs                                          |
-| Expected runtime       | ~13 minutes                                                  |
+| Expected runtime       | ~20 minutes                                                  |
 
 ### Running manually
 

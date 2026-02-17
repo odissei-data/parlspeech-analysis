@@ -2,26 +2,31 @@
 """
 ParlSpeech V2 — Cross-Parliament Comparative Summary
 =====================================================
-Produces aggregate statistics and charts across all 9 parliamentary corpora.
+Produces aggregate statistics, charts, and a party polarisation analysis
+across all 9 parliamentary corpora.
 
 Usage (Blind SANE):
     python3 script.py -i <input-dir> -o <output-dir> -t <temp-dir>
 
 Outputs (written to <output-dir>):
-    summary.csv           — one row per parliament, all statistics
-    chart_speeches.png    — total speeches per parliament
-    chart_speakers.png    — unique speakers per parliament
-    chart_avg_words.png   — average speech length per parliament
-    chart_parties.png     — number of parties per parliament
-    report.html           — self-contained HTML report
+    summary.csv              — one row per parliament, all statistics
+    polarisation.csv         — year-by-year lexical polarisation per parliament
+    chart_speeches.png       — total speeches per parliament
+    chart_speakers.png       — unique speakers per parliament
+    chart_avg_words.png      — average speech length per parliament
+    chart_parties.png        — number of parties per parliament
+    chart_polarisation.png   — lexical polarisation trends over time
+    report.html              — self-contained HTML report
 
 Source: Rauh & Schwalbach (2020), Harvard Dataverse, DOI: 10.7910/DVN/L4OAKN
 """
 
 import argparse
 import os
+import re
 import sys
 import time
+from collections import Counter
 from typing import Any, Optional
 
 import matplotlib
@@ -196,6 +201,100 @@ def compute_stats(df: pd.DataFrame, country: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Polarisation
+# ---------------------------------------------------------------------------
+
+TOKENISE_RE = re.compile(r"[a-zA-ZÀ-ÿ]{2,}")
+MAX_SPEECHES_PER_PARTY_YEAR = 5000
+MIN_SPEECHES_PER_PARTY_YEAR = 30
+VOCAB_SIZE = 2000
+
+
+def _cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
+    """Cosine distance between two vectors (1 − cosine similarity)."""
+    dot = float(np.dot(a, b))
+    norm = float(np.linalg.norm(a) * np.linalg.norm(b))
+    if norm == 0.0:
+        return 0.0
+    return 1.0 - dot / norm
+
+
+def compute_polarisation(df: pd.DataFrame, country: str) -> pd.DataFrame:
+    """Compute year-by-year lexical polarisation between parties.
+
+    Returns a DataFrame with columns: Country, Year, Polarisation, N_Parties.
+    Polarisation = mean pairwise cosine distance between party word-frequency
+    vectors (0 = identical vocabulary, 1 = completely different).
+    """
+    text_col = detect_text_column(df)
+    party_col = next((c for c in ("party", "Party", "group") if c in df.columns), None)
+    if text_col is None or party_col is None or "date" not in df.columns:
+        return pd.DataFrame(columns=["Country", "Year", "Polarisation", "N_Parties"])
+
+    df = df[["date", party_col, text_col]].copy()
+    df["_year"] = pd.to_datetime(df["date"], errors="coerce").dt.year
+    df = df.dropna(subset=["_year"])
+    df["_year"] = df["_year"].astype(int)
+
+    results: list[dict[str, Any]] = []
+
+    for year, ydf in df.groupby("_year"):
+        # filter to parties with enough speeches
+        party_counts = ydf[party_col].value_counts()
+        active_parties = party_counts[party_counts >= MIN_SPEECHES_PER_PARTY_YEAR].index.tolist()
+        if len(active_parties) < 2:
+            continue
+
+        # build word-frequency counter per party
+        party_counters: dict[str, Counter[str]] = {}
+        total_counter: Counter[str] = Counter()
+        for party in active_parties:
+            pdf = ydf[ydf[party_col] == party]
+            if len(pdf) > MAX_SPEECHES_PER_PARTY_YEAR:
+                pdf = pdf.sample(n=MAX_SPEECHES_PER_PARTY_YEAR, random_state=42)
+            text_blob = " ".join(pdf[text_col].fillna("").astype(str))
+            tokens = TOKENISE_RE.findall(text_blob.lower())
+            c: Counter[str] = Counter(tokens)
+            party_counters[party] = c
+            total_counter.update(c)
+
+        # shared vocabulary: top-N most frequent words across all parties
+        vocab = [w for w, _ in total_counter.most_common(VOCAB_SIZE)]
+        vocab_idx = {w: i for i, w in enumerate(vocab)}
+
+        # build vectors
+        vectors: dict[str, np.ndarray] = {}
+        for party in active_parties:
+            vec = np.zeros(len(vocab), dtype=np.float64)
+            for word, count in party_counters[party].items():
+                if word in vocab_idx:
+                    vec[vocab_idx[word]] = count
+            # normalise to relative frequencies
+            total = vec.sum()
+            if total > 0:
+                vec /= total
+            vectors[party] = vec
+
+        # mean pairwise cosine distance
+        parties_list = list(vectors.keys())
+        n = len(parties_list)
+        distances: list[float] = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                distances.append(_cosine_distance(vectors[parties_list[i]],
+                                                  vectors[parties_list[j]]))
+
+        results.append({
+            "Country": country,
+            "Year": int(year),  # type: ignore[arg-type]
+            "Polarisation": round(float(np.mean(distances)), 4),
+            "N_Parties": n,
+        })
+
+    return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
 # Charts
 # ---------------------------------------------------------------------------
 
@@ -237,11 +336,38 @@ def bar_chart(df: pd.DataFrame, x_col: str, y_col: str,
     plt.close(fig)
 
 
+def plot_polarisation(pol_df: pd.DataFrame, output_dir: str):
+    """Line chart: lexical polarisation over time, one line per parliament."""
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    colors = plt.cm.tab10.colors  # type: ignore[attr-defined]
+    for i, country in enumerate(DISPLAY_ORDER):
+        cdf = pol_df[pol_df["Country"] == country].sort_values("Year")
+        if cdf.empty:
+            continue
+        ax.plot(cdf["Year"], cdf["Polarisation"],
+                label=country, color=colors[i % len(colors)],
+                linewidth=1.5, alpha=0.85)
+
+    ax.set_title("Lexical Polarisation Between Parties Over Time",
+                 fontsize=13, fontweight="bold", pad=10)
+    ax.set_xlabel("Year", fontsize=10)
+    ax.set_ylabel("Mean pairwise cosine distance", fontsize=10)
+    ax.set_ylim(0, None)
+    ax.legend(fontsize=8, ncol=3, loc="upper left")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, "chart_polarisation.png"),
+                dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # HTML report
 # ---------------------------------------------------------------------------
 
-def save_html(summary: pd.DataFrame, output_dir: str):
+def save_html(summary: pd.DataFrame, pol_df: pd.DataFrame, output_dir: str):
     display_cols = [
         "Country", "Total Speeches", "Date Range",
         "Unique Speakers", "Unique Parties",
@@ -292,6 +418,11 @@ def save_html(summary: pd.DataFrame, output_dir: str):
 
   <h2>Number of Parties by Parliament</h2>
   <img src="chart_parties.png" alt="Number of parties">
+
+  <h2>Lexical Polarisation Between Parties Over Time</h2>
+  <p>Mean pairwise cosine distance between party word-frequency vectors per year.
+     Higher values indicate more linguistically distinct party vocabularies.</p>
+  <img src="chart_polarisation.png" alt="Lexical polarisation over time">
 </body>
 </html>"""
 
@@ -319,6 +450,7 @@ def main():
     print(f"Found {len(rds_files)} corpus file(s). Processing...\n")
 
     rows = []
+    pol_frames: list[pd.DataFrame] = []
     for fname in rds_files:
         stem    = fname[:-4]          # strip .rds
         country = COUNTRY_MAP.get(stem, stem)
@@ -331,6 +463,12 @@ def main():
 
         stats = compute_stats(df, country)
         rows.append(stats)
+
+        print(f"[{country}] Computing polarisation ...")
+        t1 = time.time()
+        pol = compute_polarisation(df, country)
+        pol_frames.append(pol)
+        print(f"[{country}] Polarisation done in {time.time() - t1:.1f}s")
 
         del df   # release memory before loading the next file
 
@@ -365,8 +503,16 @@ def main():
 
     print("Saved 4 charts")
 
+    # --- Polarisation ---
+    pol_all = pd.concat(pol_frames, ignore_index=True)
+    pol_all.to_csv(os.path.join(args.output, "polarisation.csv"), index=False)
+    print("Saved polarisation.csv")
+
+    plot_polarisation(pol_all, args.output)
+    print("Saved chart_polarisation.png")
+
     # --- HTML ---
-    save_html(summary, args.output)
+    save_html(summary, pol_all, args.output)
     print("Saved report.html")
 
     # --- Console summary ---
