@@ -1,4 +1,4 @@
-# ParlSpeech V2 — Cross-Parliament Comparative Analysis
+# Cross-Parliament Comparative Analysis using Blind SANE
 
 A demo analysis of the publicly available [ParlSpeech V2](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/L4OAKN) dataset, designed to run in [SURF's Blind SANE](https://servicedesk.surf.nl/wiki/spaces/WIKI/pages/96207010/Working+with+Blind+SANE+as+a+researcher) secure analysis environment.
 
